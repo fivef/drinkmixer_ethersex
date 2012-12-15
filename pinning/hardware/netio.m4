@@ -83,3 +83,23 @@ ifdef(`conf_HD44780', `
   pin(HD44780_D6, PD6)
   pin(HD44780_D7, PD7)
 ')
+
+ifdef(`conf_HC595', `dnl                                                            
+  pin(HC595_CLOCK, PD2, OUTPUT)     
+  pin(HC595_DATA, PD3, OUTPUT)    
+  pin(HC595_STORE, PD4, OUTPUT)                                                                          
+')dnl
+
+ifdef(`conf_HBRIDGE', `dnl   
+  pin(HBRIDGE_ENCODER_PHASE_A, PA2)  
+  pin(HBRIDGE_ENCODER_PHASE_B, PA1)               
+  pin(HBRIDGE_1_ENABLE, PD5, OUTPUT) //OC1A (PWM Pin)
+  pin(HBRIDGE_I1, PD6, OUTPUT)
+  pin(HBRIDGE_2_ENABLE, PD7, OUTPUT) //OC2 (PWM Pin)
+  pin(HBRIDGE_I2, PB0, OUTPUT)    
+  pin(HBRIDGE_DEBUG_LED, PC4, OUTPUT)
+  pin(HBRIDGE_SWITCH, PA3)
+')dnl
+
+
+

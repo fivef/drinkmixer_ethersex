@@ -30,43 +30,133 @@
 #include "hbridge.h"
 #include "protocols/ecmd/ecmd-base.h"
 
-#ifdef HBRIDGE_PWM_SUPPORT
-int16_t parse_cmd_hbridge_pwm_command(char *cmd, char *output, uint16_t len) 
+
+int16_t parse_cmd_hbridge_setpoint_command(char *cmd, char *output, uint16_t len) 
 {
-  uint8_t pwm = atoi(cmd);
-  HBRIDGEDEBUG ("pwm set: %i\n", pwm);
-  hbridge_pwm(HBRIDGE_1_SELECT, pwm);
-  hbridge_pwm(HBRIDGE_2_SELECT, pwm);
+  int setpoint = atoi(cmd);
+
+HBRIDGEDEBUG ("setpoint: %i\n", setpoint);
+
+	set_set_point(setpoint);
+
   
   return ECMD_FINAL_OK;
 }
-#endif /* HBRIDGE_PWM_SUPPORT */
+
+int16_t parse_cmd_hbridge_kp_command(char *cmd, char *output, uint16_t len) 
+{
+  float kp = (float) atof(cmd);
+
+	set_kp(kp);
+
+  return ECMD_FINAL_OK;
+}
+
+int16_t parse_cmd_hbridge_ki_command(char *cmd, char *output, uint16_t len) 
+{
+  float ki = (float) atof(cmd);
+
+	set_ki(ki);
+
+  return ECMD_FINAL_OK;
+}
+
+int16_t parse_cmd_hbridge_acc_command(char *cmd, char *output, uint16_t len) 
+{
+  float acc = (float) atof(cmd);
+
+	set_acceleration(acc);
+
+  
+  return ECMD_FINAL_OK;
+}
+
 
 #ifdef HBRIDGE_SUPPORT
 int16_t parse_cmd_hbridge_command(char *cmd, char *output, uint16_t len) 
 {
-#ifdef DUAL_HBRIDGE_SUPPORT
-  uint8_t action = DUAL_HBRIDGE_ACTION_FREE;
-  switch (cmd[0]) {
-	case 'f': action = DUAL_HBRIDGE_ACTION_FORWARD; break;
-	case 'b': action = DUAL_HBRIDGE_ACTION_BACKWARD; break;
-	case 's': action = DUAL_HBRIDGE_ACTION_BRAKE; break;
-	case 'r': action = DUAL_HBRIDGE_ACTION_RIGHT; break;
-	case 'l': action = DUAL_HBRIDGE_ACTION_LEFT; break;
-	case 'R': action = DUAL_HBRIDGE_ACTION_RIGHT_ONLY; break;
-	case 'L': action = DUAL_HBRIDGE_ACTION_LEFT_ONLY; break;
-  }
-  dual_hbridge(action);
-#endif /* DUAL_HBRIDGE_SUPPORT */
+
+	uint8_t h_bridge_selection = 0;
+  	uint8_t h_bridge_direction = 0; //0 = left, 1 = right
+	uint8_t h_bridge_amount = 0;
+
+	if(cmd[0] == NULL || cmd[1] == NULL ){
+		return ECMD_ERR_PARSE_ERROR;
+	}
+
+	//bridge selection
+
+	switch (cmd[0]){
+
+		case '1':
+			h_bridge_selection = HBRIDGE_1_SELECT;
+
+		break;
+
+		case '2':
+			h_bridge_selection = HBRIDGE_2_SELECT;
+		break;
+
+
+		default:
+			return ECMD_ERR_PARSE_ERROR;
+
+	}
+
+	//direction
+
+	switch (cmd[1]){
+
+		case 'l':
+			h_bridge_direction = HBRIDGE_ACTION_LEFT;
+
+		break;
+
+		case 'r':
+			h_bridge_direction = HBRIDGE_ACTION_RIGHT;
+		break;
+
+
+		case 'i':
+			
+			move_tray_to_init_position();
+		return ECMD_FINAL_OK;
+		
+
+		case 't':
+			
+			move_tray_test();
+		return ECMD_FINAL_OK;
+		
+
+
+		default:
+			return ECMD_ERR_PARSE_ERROR;
+
+	}
+
+	//amount
+
+	h_bridge_amount = atoi(cmd[2]);
+
+
+	hbridge(h_bridge_selection,h_bridge_direction);	
+
+	HBRIDGEDEBUG ("received command: hbridge: %i %i %i \n", h_bridge_selection, h_bridge_direction, h_bridge_amount);
 
   return ECMD_FINAL_OK;
 }
 #endif /* HBRIDGE_SUPPORT */
 
+
+
 /*
   -- Ethersex META --
   block([[H-Bridge]])
   header(hardware/hbridge/hbridge.h)
-  ecmd_feature(hbridge_pwm_command, "hbridge pwm", int, Set H-Bridge enable line valueeg. speed)
-  ecmd_feature(hbridge_command, "hbridge ", [action] [enable_l] [enable_r], Set H-Bridge command)
+  ecmd_feature(hbridge_setpoint_command, "hbridge setpoint", int, Set H-Bridge enable line valueeg. speed)
+  ecmd_feature(hbridge_command, "hbridge direction ", [h_bridge] [direction] [amount], h_bridge_selection . direction . amount)
+	ecmd_feature(hbridge_kp_command, "hbridge kp", float, variable . amount)
+	ecmd_feature(hbridge_ki_command, "hbridge ki", float, variable . amount)
+	ecmd_feature(hbridge_acc_command, "hbridge acc", float, variable . amount)
 */

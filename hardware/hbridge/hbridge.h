@@ -1,4 +1,4 @@
-/*
+/*	
  * Copyright (c) 2009 by Stefan Riepenhausen <rhn@gmx.net>
  *
  * This program is free software; you can redistribute it and/or modify
@@ -23,6 +23,43 @@
 #define HAVE_HBRIDGE_H
 
 #define HBRIDGE_PWM_STOP 0xFF
+#define HBRIDGE_PWM_MAX 0x00
+#define STEPS_PER_CM 60
+#define ACCELERATION_CONSTANT 10  //in PWM steps per time unit defined at bottom of hbridge.c (currently 100ms)
+#define DECELERATION_CONSTANT 20
+
+typedef struct{
+  float max /*! Max manipulated value */;
+  float min /*! Miniumum manipulated value */;
+  float e /*! Error value */;
+  float i /*! Integrator value */;
+  float kp /*! Proportional constant */;
+  float ki /*! Integrator constant */;
+  float kd /*! Differential constant */;
+  
+  float acceleration;
+  int direction; /*! Direction of movement */
+} pid_f_t;
+
+typedef struct{
+
+	int direction;
+	int count;
+	int loop_count; //will be resetted each loop for speed measurement
+
+
+
+} encoder;
+
+
+void
+init_linear_encoder();
+
+void
+init_end_switch();
+
+void
+check_switch_state();
 
 void
 init_hbridge();
@@ -33,8 +70,44 @@ hbridge_pwm(uint8_t selection, uint8_t speed);
 void
 hbridge(uint8_t selection, uint8_t action);
 
-void
-dual_hbridge(uint8_t action);
+void move_tray_to_init_position();
+
+void pid_init_f(pid_f_t * ptr /*! A pointer to the PID data structure */,
+    float min /*! The manipulated variable's minimum value */,
+    float max /*! The manipulated variable's maximum value */);
+
+float pid_update_f(float sp /*! The set point */,
+    float pv /*! The process variable */,
+    pid_f_t * ptr /*! A pointer to the PID constants */);
+
+void set_set_point(int set_point);
+
+void move_tray_test();
+
+void check_stop_threshold();
+
+void stop_all();
+
+/*
+typedef struct{
+
+
+float velocity_setpoint; //The desired motor velocity.
+float velocity; //The current motor velocity. In pulses per control loop duration.
+float integral_error;
+float previous_error;
+float kp; //The proportional gain.
+float ki; //The integral gain.
+float kd; //The derivative gain.
+
+
+
+} motor;
+*/
+
+
+
+
 
 enum {
 	HBRIDGE_1_SELECT,
@@ -46,25 +119,30 @@ enum {
 	HBRIDGE_ACTION_FREE,
 	HBRIDGE_ACTION_BRAKE,
 	HBRIDGE_ACTION_RIGHT,
-	HBRIDGE_ACTION_LEFT,
-// *** ROBOT (2 engines) MOVES
-	DUAL_HBRIDGE_ACTION_FREE,
-	DUAL_HBRIDGE_ACTION_BRAKE,
-	DUAL_HBRIDGE_ACTION_FORWARD,
-	DUAL_HBRIDGE_ACTION_BACKWARD,
-	DUAL_HBRIDGE_ACTION_RIGHT,
-	DUAL_HBRIDGE_ACTION_LEFT,
-	DUAL_HBRIDGE_ACTION_RIGHT_ONLY,
-	DUAL_HBRIDGE_ACTION_LEFT_ONLY
+	HBRIDGE_ACTION_LEFT
+
+
 };
+
+typedef enum{
+	ACCELERATE,
+	DECELERATE,
+	HOLD_SPEED,
+	STOP
+} motor_state_t;
 
 
 #include "config.h"
+
+//uncomment and delete define to enable debugging :
+//# define HBRIDGEDEBUG(a...)
+///*
 #ifdef DEBUG_HBRIDGE
 # include "core/debug.h"
 # define HBRIDGEDEBUG(a...)  debug_printf("h-bridge: " a)
 #else
 # define HBRIDGEDEBUG(a...)
 #endif
+//*/
 
 #endif  /* HAVE_HBRIDGE_H */

@@ -1,6 +1,8 @@
 TARGET := ethersex
 TOPDIR = .
 
+LDFLAGS += -Wl,-u,vfprintf -lprintf_flt -lm
+
 SUBDIRS += control6
 SUBDIRS += core
 SUBDIRS += core/crypto
