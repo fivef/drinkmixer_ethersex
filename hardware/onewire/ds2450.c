@@ -579,8 +579,8 @@ ow_ds2450_get(ow_rom_code_t * rom, uint8_t channel_start,
  * returns the number of bytes successfully read, -1 on failure
  */
 int8_t
-ow_ds2450_mempage_read(ow_rom_code_t * rom, int8_t mempage, uint8_t len,
-                       uint8_t * mem)
+ow_ds2450_mempage_read(const ow_rom_code_t * rom, const int8_t mempage,
+                       const uint8_t len, uint8_t * mem)
 {
   // FIXME: currently only on 1st bus
   uint8_t mask = 1 << (ONEWIRE_STARTPIN);
@@ -604,7 +604,7 @@ ow_ds2450_mempage_read(ow_rom_code_t * rom, int8_t mempage, uint8_t len,
   }
 
   DS2450_CORE_DEBUG
-    ("ow_ds2450_mempage_read: memory page starting addr: %02x, bytes " +
+    ("ow_ds2450_mempage_read: memory page starting addr: %02x, bytes "
      "remaining: %i, len: %i.\n", mempage, bytes_remaining, len);
 
   ow_write_byte(mask, OW_DS2450_READ_MEMORY);
@@ -698,7 +698,7 @@ ow_ds2450_mempage_write(ow_rom_code_t * rom, int8_t mempage, uint8_t len,
   }
 
   DS2450_CORE_DEBUG
-    ("ow_ds2450_mempage_write: memory page starting addr: %02x, bytes " +
+    ("ow_ds2450_mempage_write: memory page starting addr: %02x, bytes "
      "remaining: %i, len: %i.\n", mempage, bytes_remaining, len);
 
   ow_write_byte(mask, OW_DS2450_WRITE_MEMORY);
@@ -749,7 +749,7 @@ ow_ds2450_mempage_write(ow_rom_code_t * rom, int8_t mempage, uint8_t len,
 #endif
     {
       DS2450_CORE_DEBUG
-        ("ow_ds2450_mempage_write: read-back verification failed: wrote: " +
+        ("ow_ds2450_mempage_write: read-back verification failed: wrote: "
          "%02x, read-back: %02x!\n", mem[i], b);
       return -2;
     }

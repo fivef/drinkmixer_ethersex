@@ -5,6 +5,7 @@
  * Copyright (c) 2011 by Maximilian Güntner
  * Copyright (c) 2011 by Erik Kunze <ethersex@erik-kunze.de>
  * Copyright (c) 2011-2012 by Frank Sautter
+ * Copyright (c) 2012 by Sascha Ittner <sascha.ittner@modusoft.de>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License (either version 2 or
@@ -23,13 +24,21 @@
  * http://www.gnu.org/copyleft/gpl.html
  */
 
+#include "config.h"
+
+#ifdef ONEWIRE_HOOK_SUPPORT
+#define HOOK_NAME ow_poll
+#define HOOK_ARGS (ow_sensor_t * ow_sensor, uint8_t state)
+#define HOOK_COUNT 3
+#define HOOK_ARGS_CALL (ow_sensor, state)
+#define HOOK_IMPLEMENT 1
+#endif
 
 #include <avr/io.h>
 #include <util/atomic.h>
 #include <util/delay.h>
 #include <util/crc16.h>
 
-#include "config.h"
 #include "core/eeprom.h"
 #include "onewire.h"
 #include "core/bit-macros.h"
@@ -38,8 +47,21 @@
 
 #include "core/debug.h"
 
+#ifdef ONEWIRE_NAMING_SUPPORT
+#include "core/eeprom.h"
+#endif
+
 /* global variables */
 ow_global_t ow_global;
+
+#ifdef ONEWIRE_POLLING_SUPPORT
+/* perform an initial bus discovery on startup */
+uint16_t ow_discover_interval = 1; // minimal initial delay
+#endif
+
+#if defined(ONEWIRE_POLLING_SUPPORT) || defined(ONEWIRE_NAMING_SUPPORT)
+ow_sensor_t ow_sensors[OW_SENSORS_COUNT];
+#endif
 
 /* module local prototypes */
 void noinline ow_set_address_bit(ow_rom_code_t * rom, uint8_t idx,
@@ -54,6 +76,20 @@ onewire_init(void)
 
   /* release lock */
   ow_global.lock = 0;
+
+#if defined(ONEWIRE_POLLING_SUPPORT) || defined(ONEWIRE_NAMING_SUPPORT)
+  /* initialize sensor data */
+  memset(ow_sensors, 0, OW_SENSORS_COUNT * sizeof(ow_sensor_t));
+#endif
+
+#if ONEWIRE_POLLING_SUPPORT
+  ow_periodic();
+#endif
+
+#ifdef ONEWIRE_NAMING_SUPPORT
+  /* restore sensor names */
+  ow_names_restore();
+#endif
 }
 
 
@@ -360,10 +396,13 @@ ow_temp_sensor(ow_rom_code_t * rom)
 int8_t
 ow_temp_start_convert(ow_rom_code_t * rom, uint8_t wait)
 {
+
   int8_t ret;
 
-  if (rom == NULL)
+  if (rom == NULL) {
     ret = ow_skip_rom();
+    OW_DEBUG_POLL("start conversion on all sensors\n");
+  }
   else
   {
     /* check for known family code */
@@ -371,6 +410,10 @@ ow_temp_start_convert(ow_rom_code_t * rom, uint8_t wait)
       return -2;
 
     ret = ow_match_rom(rom);
+    OW_DEBUG_POLL("start conversion on device %02x %02x %02x %02x %02x %02x "
+        "%02x %02x\n", rom->bytewise[0], rom->bytewise[1],
+        rom->bytewise[2], rom->bytewise[3], rom->bytewise[4],
+        rom->bytewise[5], rom->bytewise[6], rom->bytewise[7]);
   }
 
   if (ret < 0)
@@ -559,15 +602,29 @@ ow_eeprom_read(ow_rom_code_t * rom, void *data)
 }
 #endif /* ONEWIRE_DS2502_SUPPORT */
 
+#if defined(ONEWIRE_POLLING_SUPPORT) || defined(ONEWIRE_NAMING_SUPPORT)
+ow_sensor_t *
+ow_find_sensor(ow_rom_code_t * rom)
+{
+  int8_t i = ow_find_sensor_index(rom);
+
+  if (i >= 0)
+    return &ow_sensors[i];
+  else
+    return NULL;
+}
+
+int8_t
+ow_find_sensor_index(ow_rom_code_t * rom)
+{
+  for (int8_t i = 0; i < OW_SENSORS_COUNT; i++)
+    if (ow_sensors[i].ow_rom_code.raw == rom->raw)
+      return i; /* found it */
+  return -1;
+}
+#endif
 
 #ifdef ONEWIRE_POLLING_SUPPORT
-ow_sensor_t ow_sensors[OW_SENSORS_COUNT] = {
-  {{{0}
-    }
-   , 0, 0, 0, 0, 0}
-};
-
-
 static int8_t
 ow_discover_sensor(void)
 {
@@ -578,9 +635,7 @@ ow_discover_sensor(void)
   ow_global.bus = 0;
 #endif /* ONEWIRE_BUSCOUNT */
 
-#ifdef DEBUG_OW_POLLING
-  debug_printf("starting discovery\n");
-#endif /* DEBUG_OW_POLLING */
+  OW_DEBUG_POLL("starting discovery\n");
 
   /* prepare existing sensors */
   for (uint8_t i = 0; i < OW_SENSORS_COUNT; i++)
@@ -608,8 +663,7 @@ ow_discover_sensor(void)
       if (ret == 1)
       {
         firstonbus = 0;
-#ifdef DEBUG_OW_POLLING
-        debug_printf
+        OW_DEBUG_POLL
           ("discovered device %02x %02x %02x %02x %02x %02x %02x %02x"
 #if ONEWIRE_BUSCOUNT > 1
            " on bus %d"
@@ -627,7 +681,6 @@ ow_discover_sensor(void)
            , ow_global.bus
 #endif /* ONEWIRE_BUSCOUNT > 1 */
           );
-#endif /* DEBUG_OW_POLLING */
         if (ow_temp_sensor(&ow_global.current_rom))
         {
           uint8_t already_in = 0;
@@ -653,20 +706,18 @@ ow_discover_sensor(void)
               if (ow_sensors[i].ow_rom_code.raw == 0)
               {
                 /* found a free slot... storing */
-#ifdef DEBUG_OW_POLLING
-                debug_printf("stored new sensor in pos %d\n", i);
-#endif /* DEBUG_OW_POLLING */
+                OW_DEBUG_POLL("stored new sensor in pos %d\n", i);
                 ow_sensors[i].ow_rom_code.raw = ow_global.current_rom.raw;
                 ow_sensors[i].present = 1;
                 /* read temperature asap
                  * eeproms will be checked for later */
-                ow_sensors[i].read_delay = 1;
+                ow_sensors[i].polling_delay = 1;
                 break;
               }
             }
 #ifdef DEBUG_OW_POLLING
             if (i == OW_SENSORS_COUNT - 1)
-              debug_printf("number of sensors exceeds list size of %d\n",
+              OW_DEBUG_POLL("number of sensors exceeds list size of %d\n",
                            OW_SENSORS_COUNT);
 #endif /* DEBUG_OW_POLLING */
           }
@@ -674,7 +725,7 @@ ow_discover_sensor(void)
         }
         else
         {
-          debug_printf("not a temperature sensor\n");
+          OW_DEBUG_POLL("not a temperature sensor\n");
 #endif /* DEBUG_OW_POLLING */
         }
       }
@@ -691,29 +742,36 @@ ow_discover_sensor(void)
   for (uint8_t i = 0; i < OW_SENSORS_COUNT; i++)
   {
     /* mark the slot as free */
-    if (ow_sensors[i].present == 0)
-      ow_sensors[i].ow_rom_code.raw = 0;
+    if (!ow_sensors[i].present)
+    {
+#ifdef ONEWIRE_NAMING_SUPPORT
+      if (!ow_sensors[i].named)
+      {
+#endif
+        ow_sensors[i].ow_rom_code.raw = 0;
+#ifdef ONEWIRE_NAMING_SUPPORT
+      }
+#endif
+      ow_sensors[i].temp = 0;
+    }
   }
   return 0;
 }
 
-
-/* this function will be called every 800 ms */
+/* this function will be called every 1s */
 void
 ow_periodic(void)
 {
-  /* perform an initial bus discovery on startup */
-  static uint16_t discover_delay = 3;
-  if (--discover_delay == 0)
+  if (--ow_discover_interval == 0)
   {
-    discover_delay = OW_DISCOVER_DELAY;
+    ow_discover_interval = OW_DISCOVER_INTERVAL;
     ow_discover_sensor();
 #ifdef DEBUG_OW_POLLING
     for (uint8_t i = 0, k = 0; i < OW_SENSORS_COUNT; i++)
     {
       if (ow_sensors[i].ow_rom_code.raw != 0)
       {
-        debug_printf
+        OW_DEBUG_POLL
           ("sensor #%d in list is: %02x %02x %02x %02x %02x %02x %02x %02x\n",
            ++k, ow_sensors[i].ow_rom_code.bytewise[0],
            ow_sensors[i].ow_rom_code.bytewise[1],
@@ -731,55 +789,113 @@ ow_periodic(void)
   {
     if (ow_temp_sensor(&ow_sensors[i].ow_rom_code))
     {
-      if (ow_sensors[i].converted == 1)
+      if (ow_sensors[i].converted)
       {
-        if (ow_sensors[i].convert_delay == 1)
-          ow_sensors[i].convert_delay = 0;
-        else
+        if (--ow_sensors[i].convert_delay == 0)
         {
-#ifdef DEBUG_OW_POLLING
-          debug_printf("reading temperature\n");
-#endif /* DEBUG_OW_POLLING */
           int8_t ret;
           ow_temp_scratchpad_t sp;
           ret = ow_temp_read_scratchpad(&ow_sensors[i].ow_rom_code, &sp);
 
           if (ret != 1)
           {
-#ifdef DEBUG_OW_POLLING
-            debug_printf("scratchpad read failed: %d\n", ret);
-#endif /* DEBUG_OW_POLLING */
-            return;
+            OW_DEBUG_POLL("scratchpad read failed: %d\n", ret);
+            continue;
           }
-#ifdef DEBUG_OW_POLLING
-          debug_printf("scratchpad read succeeded\n");
-#endif /* DEBUG_OW_POLLING */
           int16_t temp = ow_temp_normalize(&ow_sensors[i].ow_rom_code, &sp);
-#ifdef DEBUG_OW_POLLING
-          debug_printf("temperature: %d.%d\n", HI8(temp),
-                       LO8(temp) > 0 ? 5 : 0);
-#endif /* DEBUG_OW_POLLING */
+          OW_DEBUG_POLL("temperature: %d.%d°C on device "
+              "%02x %02x %02x %02x %02x %02x %02x %02x\n", HI8(temp),
+              LO8(temp) > 0 ? 5 : 0, ow_sensors[i].ow_rom_code.bytewise[0],
+                  ow_sensors[i].ow_rom_code.bytewise[1],
+                  ow_sensors[i].ow_rom_code.bytewise[2],
+                  ow_sensors[i].ow_rom_code.bytewise[3],
+                  ow_sensors[i].ow_rom_code.bytewise[4],
+                  ow_sensors[i].ow_rom_code.bytewise[5],
+                  ow_sensors[i].ow_rom_code.bytewise[6],
+                  ow_sensors[i].ow_rom_code.bytewise[7]);
           ow_sensors[i].temp =
             ((int8_t) HI8(temp)) * 10 + HI8(((temp & 0x00ff) * 10) + 0x80);
           ow_sensors[i].converted = 0;
+#ifdef ONEWIRE_HOOK_SUPPORT
+          hook_ow_poll_call(&ow_sensors[i], OW_READY);
+#endif
         }
       }
-      if (--ow_sensors[i].read_delay == 0 && ow_sensors[i].converted == 0)
+      if (--ow_sensors[i].polling_delay == 0 && !ow_sensors[i].converted)
       {
-        ow_sensors[i].read_delay = OW_READ_DELAY;
+        ow_sensors[i].polling_delay = OW_POLLING_INTERVAL;
         ow_temp_start_convert_nowait(&ow_sensors[i].ow_rom_code);
-        ow_sensors[i].convert_delay = 1;
+        ow_sensors[i].convert_delay = 1;  // wait 1s for conversion
         ow_sensors[i].converted = 1;
+#ifdef ONEWIRE_HOOK_SUPPORT
+        hook_ow_poll_call(&ow_sensors[i], OW_CONVERT);
+#endif
       }
     }
   }
 }
 #endif /* ONEWIRE_POLLING_SUPPORT */
 
+/* naming support */
+#ifdef ONEWIRE_NAMING_SUPPORT
+
+ow_sensor_t *
+ow_find_sensor_name(const char *name)
+{
+  /* search for matching name */
+  for (int8_t i = 0; i < OW_SENSORS_COUNT; i++)
+  {
+    if (ow_sensors[i].named &&
+        strncmp(name, ow_sensors[i].name, OW_NAME_LENGTH) == 0)
+    {
+      return &ow_sensors[i];
+    }
+  }
+  return NULL;
+}
+
+void
+ow_names_restore(void)
+{
+  ow_name_t temp_name;
+  for (int8_t i = 0; i < OW_SENSORS_COUNT; i++)
+  {
+    ow_sensors[i].named = 0;
+    eeprom_restore(ow_names[i], &temp_name, sizeof(ow_name_t));
+    if (temp_name.ow_rom_code.raw != 0)
+    {
+      ow_sensors[i].named = 1;
+      ow_sensors[i].ow_rom_code.raw = temp_name.ow_rom_code.raw;
+      strncpy(ow_sensors[i].name, temp_name.name, OW_NAME_LENGTH);
+#ifdef ONEWIRE_POLLING_SUPPORT
+      ow_sensors[i].polling_delay = 1;
+#endif
+    }
+  }
+}
+
+void
+ow_names_save(void)
+{
+  ow_name_t temp_name;
+  for (int8_t i = 0; i < OW_SENSORS_COUNT; i++)
+  {
+    memset(&temp_name, 0, sizeof(ow_name_t));
+    if (ow_sensors[i].named)
+    {
+      temp_name.ow_rom_code.raw = ow_sensors[i].ow_rom_code.raw;
+      strncpy(temp_name.name, ow_sensors[i].name, OW_NAME_LENGTH);
+    }
+    eeprom_save(ow_names[i], &temp_name, sizeof(ow_name_t));
+  }
+  eeprom_update_chksum();
+}
+
+#endif /* ONEWIRE_NAMING_SUPPORT */
 
 /*
   -- Ethersex META --
   header(hardware/onewire/onewire.h)
   init(onewire_init)
-  ifdef(`conf_ONEWIRE_POLLING',`timer(40, ow_periodic())')
+  ifdef(`conf_ONEWIRE_POLLING',`timer(50, ow_periodic())')
 */

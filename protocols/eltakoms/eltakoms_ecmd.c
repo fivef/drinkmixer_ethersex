@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2009 by Stefan Riepenhausen <rhn@gmx.net>
+ * Copyright (c) 2021 by Frank Sautter <ethersix@sautter.com>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -19,27 +19,36 @@
  * http://www.gnu.org/copyleft/gpl.html
  */
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <avr/io.h>
 #include "config.h"
 
-#ifdef GAME_INPUT_SUPPORT
+#ifdef ELTAKOMS_SUPPORT
 
-#include "hardware/input/buttons/buttons.h"
-#include "game_commons.h"
+#include <avr/pgmspace.h>
+#include <string.h>
+#include <stdio.h>
+#include <stdlib.h>
 
-#ifdef DEBUG_GAME_INPUT
-#include "core/debug.h"
-void
-debug_game_input_handler(uint8_t b)
+#include "protocols/ecmd/ecmd-base.h"
+#include "eltakoms.h"
+
+
+int16_t
+parse_cmd_weather(char *cmd, char *output, uint16_t len)
 {
-   GAMEINPUTDEBUG("handle: %d\n", b);
+  if(eltakoms_data.valid)
+    return ECMD_FINAL(snprintf_P(output, len,
+      PSTR("t%+3.3d s%2.2d w%2.2d e%2.2d %c d%3.3d v%3.3d %c"),
+      eltakoms_data.temperature, eltakoms_data.suns, eltakoms_data.sunw,
+      eltakoms_data.sune, (eltakoms_data.obscure ? 'O' : 'o'),
+      eltakoms_data.dawn, eltakoms_data.wind,
+      (eltakoms_data.rain ? 'R' : 'r')));
+  else
+    return ECMD_FINAL(snprintf_P(output, len, PSTR("eltakoms data invalid")));
 }
-#endif
-
-#endif // GAME_INPUT_SUPPORT
+#endif /* ELTAKOMS_H */
 
 /*
   -- Ethersex META --
+  block([[Eltako]])
+  ecmd_feature(weather, "weather",,Get eltako weather data)
 */
