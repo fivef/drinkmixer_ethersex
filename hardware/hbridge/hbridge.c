@@ -53,24 +53,25 @@ pid_f_t *pid_constants_ptr = &pid_constants;
 encoder encoder1;
 encoder *encoder1_ptr = &encoder1;
 
-//define set point for pid control
+//set point for pid control
 int pid_set_point = 0;
 
 //for acceleration control
 int ramped_set_point = 0;
-float pwm = 0.0;
-int acceleration_limiter_switch_off_threshold = 10;
-int acceleration = 5;
+float pwm = 0;
+int acceleration_limiter_switch_off_threshold = ACCELERATION_LIMITED_SWITCH_OFF_THRESHOLD;
+int acceleration = ACCELERATION;
 int error = 0;
 
 //for check stop threshold to stop the motor if close to setpoint
-	int last_error = 0;
-	int POSITION_TOLERANCE = 10; //if error is smaller than this value the motor stops
-											 //trying to reach setpoint (1 = 0,083 mm)
-
+int last_error = 0;
+int position_tolerance = POSITION_TOLERANCE;
 
 uint8_t enable1_pwm=HBRIDGE_PWM_STOP;
 uint8_t enable2_pwm=HBRIDGE_PWM_STOP;
+
+//for left end switch debouncing
+int left_end_switch_enabled = 1;
 
 
 /*
@@ -92,7 +93,7 @@ void
 init_hbridge(){
 
 	//init pid
-	pid_init_f(pid_constants_ptr, 0.0, 150.0); //150 für 60Hz betrieb
+	pid_init_f(pid_constants_ptr, PID_PWM_MIN, PID_PWM_MAX); 
 
 
 	
@@ -335,6 +336,7 @@ ISR(ANA_COMP_vect) {
 void set_set_point(int set_point){
 
 	 pid_set_point = set_point;
+	 
 }
 
 void set_kp(float kp){
@@ -361,9 +363,12 @@ void check_switch_state(){
 
 	//if the stop switch is activated stop motor
 	
-	 if (PIN_HIGH(HBRIDGE_SWITCH)==0){
+	 if (PIN_HIGH(HBRIDGE_SWITCH)==0 && left_end_switch_enabled == 1){
+
+			left_end_switch_enabled = 0;
+			
 		
-			HBRIDGEDEBUG ("counted steps: %d",encoder1_ptr->count);
+			HBRIDGEDEBUG ("counted steps: %d \n",encoder1_ptr->count);
 		
 			stop_all();
 			
@@ -372,8 +377,8 @@ void check_switch_state(){
 			hbridge_disable(HBRIDGE_1_SELECT);
 			hbridge_disable(HBRIDGE_2_SELECT); //TODO: adapt for second motor
 
+			set_set_point(100);
 
-			HBRIDGEDEBUG ("motor stopped");
 
 	}
 }
@@ -414,10 +419,14 @@ void main_loop(){
 		
 		if(pid_constants_ptr->direction == HBRIDGE_ACTION_RIGHT){
 			ramped_set_point += acceleration;
+			
 		}else if (pid_constants_ptr->direction == HBRIDGE_ACTION_LEFT){
 
 			ramped_set_point -= acceleration;
 		}
+
+		//increase acceleration for each iteration to go faster but with slow acceleration
+		
 
 
 	}else{//if the ramped set point is very close to the real setpoint 
@@ -431,7 +440,9 @@ void main_loop(){
 
 	pwm = pid_update_f((float)ramped_set_point, (float)encoder1_ptr->count, pid_constants_ptr); 
 
-	pwm = 255-pwm;
+
+	//invert pwm
+	pwm = HBRIDGE_PWM_STOP - pwm;
 
 
 
@@ -457,17 +468,21 @@ void check_stop_threshold(){
 			pid_constants_ptr->direction, encoder1_ptr->count, pid_constants_ptr->e);
 
 
-		//stop if in range of POSITION_TOLERANCE
-	if(abs(pid_constants_ptr->e) < POSITION_TOLERANCE){ // && last_error < POSITION_TOLERANCE
+		//stop if in range of position_tolerance
+	if(abs(pid_constants_ptr->e) < position_tolerance){ // && last_error < position_tolerance
 
 		stop_all();
 
-		HBRIDGEDEBUG ("Stopped because POSITION_TOLERANCE was reached \n");
+		HBRIDGEDEBUG ("Stopped because position_tolerance was reached \n");
 
 
 	}
 
 	//last_error = abs(pid_constants_ptr->e);
+
+	//reenable left end switch
+
+	left_end_switch_enabled = 1;
 
 
 }
@@ -498,15 +513,11 @@ void pid_init_f(pid_f_t * ptr /*! A pointer to the PID data structure */,
 
 	ptr->e = 0.0;
 	ptr->i = 0.0;
-	//ptr->kp = 0.4f;
-	//ptr->ki = 0.009f;
-	//ptr->kd = 0.032f;
 
-	ptr->kp = 1.5;
-	ptr->ki = 0.0;
-	ptr->kd = 0.0;
+	ptr->kp = KP;
+	ptr->ki = KI;
+	ptr->kd = KD;
 
-	ptr->acceleration = 0.1;
 	
 }
  
@@ -577,6 +588,6 @@ void move(uint8_t selection, uint8_t direction){
 */
 //timer(1,main_loop())
 //timer(5,main_loop())
-//TODO: adapt timer value (value x 40ms ?)
+//TODO: adapt timer value (value x 20ms ?)
 //put this into meta for periodic call of function timer(1, joystick_digital_periodic())
 

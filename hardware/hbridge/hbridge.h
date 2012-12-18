@@ -22,11 +22,32 @@
 #ifndef HAVE_HBRIDGE_H
 #define HAVE_HBRIDGE_H
 
+/*!if the ramped set point is very close to the real setpoint 
+closer than ACCELERATION_LIMITED_SWITCH_OFF_THRESHOLD the ramping is disabled */
+#define ACCELERATION_LIMITED_SWITCH_OFF_THRESHOLD 10
+
+/*!Default acceleration for the ramping curve*/
+#define ACCELERATION 1
+
+/*!If the error is smaller than this value the motor stops to avoid noise.
+one step = 0,083 mm */
+#define POSITION_TOLERANCE 15
+
+/*!pwm values for pid control*/
+#define PID_PWM_MIN 0.0
+#define PID_PWM_MAX 150.0 //PID_PWM_MAX = 150 good for 60Hz PWM
+
+/*!pid initial values*/
+#define KP 1.3
+#define KI 0
+#define KD 0
+
+
+
+/*!pwm defines for hbridge*/
 #define HBRIDGE_PWM_STOP 0xFF
 #define HBRIDGE_PWM_MAX 0x00
-#define STEPS_PER_CM 60
-#define ACCELERATION_CONSTANT 10  //in PWM steps per time unit defined at bottom of hbridge.c (currently 100ms)
-#define DECELERATION_CONSTANT 20
+
 
 typedef struct{
   float max /*! Max manipulated value */;
