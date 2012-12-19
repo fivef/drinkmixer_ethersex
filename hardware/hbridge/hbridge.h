@@ -43,99 +43,14 @@ one step = 0,083 mm */
 #define KD 0
 
 
-
 /*!pwm defines for hbridge*/
 #define HBRIDGE_PWM_STOP 0xFF
 #define HBRIDGE_PWM_MAX 0x00
 
-
-typedef struct{
-  float max /*! Max manipulated value */;
-  float min /*! Miniumum manipulated value */;
-  float e /*! Error value */;
-  float i /*! Integrator value */;
-  float kp /*! Proportional constant */;
-  float ki /*! Integrator constant */;
-  float kd /*! Differential constant */;
-  
-  float acceleration;
-  int direction; /*! Direction of movement */
-} pid_f_t;
-
-typedef struct{
-
-	int direction;
-	int count;
-	int loop_count; //will be resetted each loop for speed measurement
-
-
-
-} encoder;
-
-
-void
-init_linear_encoder();
-
-void
-init_end_switch();
-
-void
-check_switch_state();
-
-void
-init_hbridge();
-
-void
-hbridge_pwm(uint8_t selection, uint8_t speed);
-
-void
-hbridge(uint8_t selection, uint8_t action);
-
-void move_tray_to_init_position();
-
-void pid_init_f(pid_f_t * ptr /*! A pointer to the PID data structure */,
-    float min /*! The manipulated variable's minimum value */,
-    float max /*! The manipulated variable's maximum value */);
-
-float pid_update_f(float sp /*! The set point */,
-    float pv /*! The process variable */,
-    pid_f_t * ptr /*! A pointer to the PID constants */);
-
-void set_set_point(int set_point);
-
-void move_tray_test();
-
-void check_stop_threshold();
-
-void stop_all();
-
-/*
-typedef struct{
-
-
-float velocity_setpoint; //The desired motor velocity.
-float velocity; //The current motor velocity. In pulses per control loop duration.
-float integral_error;
-float previous_error;
-float kp; //The proportional gain.
-float ki; //The integral gain.
-float kd; //The derivative gain.
-
-
-
-} motor;
-*/
-
-
-
-
-
 enum {
 	HBRIDGE_1_SELECT,
 	HBRIDGE_2_SELECT,
-// *** ENABLE HBRIDGE
-	HBRIDGE_1_ENABLE,
-	HBRIDGE_2_ENABLE,
+
 // *** SINGLE ENGINE MOVES
 	HBRIDGE_ACTION_FREE,
 	HBRIDGE_ACTION_BRAKE,
@@ -145,25 +60,89 @@ enum {
 
 };
 
-typedef enum{
-	ACCELERATE,
-	DECELERATE,
-	HOLD_SPEED,
-	STOP
-} motor_state_t;
+/*!PID datastructure*/
+typedef struct{
+  float max /*!< Max manipulated value */;
+  float min /*!< Miniumum manipulated value */;
+  float e /*!< Error value */;
+  float i /*!< Integrator value */;
+  float kp /*!< Proportional constant */;
+  float ki /*!< Integrator constant */;
+  float kd /*!< Differential constant */;
+  int direction; /*!< Direction of movement */
+} pid_f_t;
+
+/*!Encoder datastructure*/
+typedef struct{
+
+	int count; /*!< Inpulese Counter*/
+
+} encoder;
+
+
+
+void
+move_tray_to_init_position();
+
+void 
+set_set_point(int set_point);
+
+void 
+set_kp(float kp);
+
+void 
+set_ki(float ki);
+
+void 
+set_acceleration(int acc);
+
+
+void
+init_hbridge();
+
+void
+init_linear_encoder();
+
+void
+init_end_switch();
+
+void pid_init_f(pid_f_t * ptr /*! A pointer to the PID data structure */,
+    float min /*! The manipulated variable's minimum value */,
+    float max /*! The manipulated variable's maximum value */);
+
+void main_loop();
+
+void
+check_switch_state();
+
+void
+hbridge(uint8_t selection, uint8_t action);
+
+void
+hbridge_pwm(uint8_t selection, uint8_t speed);
+
+void 
+check_stop_threshold();
+
+void 
+stop_all();
+
+float 
+pid_update_f(float sp /*! The set point */,
+    float pv /*! The process variable */,
+    pid_f_t * ptr /*! A pointer to the PID constants */);
+
+
+
 
 
 #include "config.h"
 
-//uncomment and delete define to enable debugging :
-//# define HBRIDGEDEBUG(a...)
-///*
 #ifdef DEBUG_HBRIDGE
 # include "core/debug.h"
 # define HBRIDGEDEBUG(a...)  debug_printf("h-bridge: " a)
 #else
 # define HBRIDGEDEBUG(a...)
 #endif
-//*/
 
 #endif  /* HAVE_HBRIDGE_H */

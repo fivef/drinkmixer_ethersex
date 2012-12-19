@@ -1,5 +1,4 @@
 /*
- * Copyright (c) 2010 by Stefan Riepenhausen <rhn@gmx.net>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -22,7 +21,7 @@
 /*
 OCR1A and OCR2 pins are used for pwm!!!!
 
-Check hardwares pinning *.m4:
+Check hardware's pinning *.m4 (e.g. netio.m4):
 */
 
 #include <avr/pgmspace.h>
@@ -36,18 +35,11 @@ Check hardwares pinning *.m4:
 #include "config.h"
 #include "hbridge.h"
 
-//comparator
+//for comparator
 #include <avr/io.h> 
 
 
-uint8_t hbridge_1_current_speed = HBRIDGE_PWM_STOP; //variable for incremental speed up 255 is stop, 0 full speed
-uint8_t hbridge_2_current_speed = HBRIDGE_PWM_STOP; //variable for incremental speed up
-
 //init data structures
-
-//pid
-pid_f_t pid_constants;
-pid_f_t *pid_constants_ptr = &pid_constants;
 
 //encoder
 encoder encoder1;
@@ -55,6 +47,10 @@ encoder *encoder1_ptr = &encoder1;
 
 //set point for pid control
 int pid_set_point = 0;
+
+//pid
+pid_f_t pid_constants;
+pid_f_t *pid_constants_ptr = &pid_constants;
 
 //for acceleration control
 int ramped_set_point = 0;
@@ -67,6 +63,8 @@ int error = 0;
 int last_error = 0;
 int position_tolerance = POSITION_TOLERANCE;
 
+
+//set PWM values to STOP
 uint8_t enable1_pwm=HBRIDGE_PWM_STOP;
 uint8_t enable2_pwm=HBRIDGE_PWM_STOP;
 
@@ -74,29 +72,18 @@ uint8_t enable2_pwm=HBRIDGE_PWM_STOP;
 int left_end_switch_enabled = 1;
 
 
-/*
-sets the speed (speed [0,255]) of the selected (selection) H-Bridge
-*/
-void
-hbridge_pwm(uint8_t selection, uint8_t speed){
-  if (selection==HBRIDGE_1_SELECT){
-    enable1_pwm=speed;
-    OCR1A=enable1_pwm;
-  } else {
-    enable2_pwm=speed;
-    OCR2=enable2_pwm; 
-  }
-}
+/****************************
 
+INITIALIZATION FUNCTIONS
 
+****************************/
+
+/*! Initializes the H bridge module including pid controller, linear encoder and end witch */
 void
 init_hbridge(){
 
 	//init pid
 	pid_init_f(pid_constants_ptr, PID_PWM_MIN, PID_PWM_MAX); 
-
-
-	
   	init_linear_encoder();
 	init_end_switch();
 
@@ -153,85 +140,14 @@ init_hbridge(){
 		//TCCR2|=_BV(CS22);   //clk/64  high frequency noise but good driving  1
 		//TCCR2|=_BV(CS21)|_BV(CS20);  //clk/32 high frequency very loud bad movement 4
 		//TCCR2|=_BV(CS21); //clk/8  very high frequency very bad movement 5
+
+
+
+	//move tray to 0 position
+	move_tray_to_init_position();
 }
 
-void
-hbridge_disable(uint8_t selection){
-
-  if (selection==HBRIDGE_1_SELECT){
-  	OCR1A=HBRIDGE_PWM_STOP;
-	hbridge_1_current_speed = HBRIDGE_PWM_STOP;
-  } else {
-  	OCR2=HBRIDGE_PWM_STOP; 
-	hbridge_2_current_speed = HBRIDGE_PWM_STOP;
-  }
-
-}
-
-void
-hbridge_enable(uint8_t selection){
-
-  if (selection==HBRIDGE_1_SELECT){
-    OCR1A=enable1_pwm;
-  } else {
-    OCR2=enable2_pwm; 
-  }
-
-}
-
-
-
-void
-hbridge(uint8_t selection, uint8_t action)
-{
-  if (selection==HBRIDGE_1_SELECT){
-
-		  PIN_CLEAR(HBRIDGE_I1);
-
-		  switch (action){
-			case HBRIDGE_ACTION_BRAKE: 
-				hbridge_disable(selection); // PIN_CLEAR(HBRIDGE_1_ENABLE);
-				break;
-			case HBRIDGE_ACTION_RIGHT: 
-
-			 	PIN_CLEAR(HBRIDGE_I1);
-
-				hbridge_enable(selection); // PIN_SET(HBRIDGE_1_ENABLE);
-				break;
-			case HBRIDGE_ACTION_LEFT: 
-
-			  	PIN_SET(HBRIDGE_I1);
-
-				hbridge_enable(selection); // PIN_SET(HBRIDGE_1_ENABLE);
-				break;
-		  }
-
-  }else{
-
-	 	 PIN_CLEAR(HBRIDGE_I2);
-
-		  switch (action){
-			case HBRIDGE_ACTION_BRAKE: 
-				hbridge_disable(selection); // PIN_CLEAR(HBRIDGE_2_ENABLE);
-				break;
-			case HBRIDGE_ACTION_LEFT: 
-
-			  	PIN_CLEAR(HBRIDGE_I2);
-				hbridge_enable(selection); // PIN_SET(HBRIDGE_2_ENABLE);
-				break;
-			case HBRIDGE_ACTION_RIGHT: 
-
-			  	PIN_SET(HBRIDGE_I2);
-				hbridge_enable(selection); // PIN_SET(HBRIDGE_2_ENABLE);
-				break;
-		  }
-
-  } 
-
-}
-
-
-/*inits the analog comparator for linear encoder reading*/
+/*! Initializes the analog comparator for linear encoder reading */
 
 void init_linear_encoder(){
 
@@ -257,132 +173,45 @@ void init_linear_encoder(){
 	DDRA&=~(1<<HBRIDGE_ENCODER_PHASE_B_PIN);//as input
 	PORTA&=~(1<<HBRIDGE_ENCODER_PHASE_B_PIN);//no Pull-up
 
-
-	encoder1_ptr->direction = 0;
 	encoder1_ptr->count = 0;
-	encoder1_ptr->loop_count = 0;
+	
 }
 
-void encoder_update(encoder *e, int A, int B){
-	// Determine direction and update encoder count from the logic levels of the encoder's A and B outputs.
-	if(A == 1){
-		// Rising edge of A.
-		if(B == 1){
-			e->direction = HBRIDGE_ACTION_RIGHT;
-			e->count ++;
-			e->loop_count++;
-		}
-		else{
-			e->direction = HBRIDGE_ACTION_LEFT;
-			e->count --;
-			e->loop_count--;
-
-
-		}
-	}
-	else{
-		// Falling edge of A.
-		if(B == 1){
-			e->direction = HBRIDGE_ACTION_LEFT;
-			e->count --;
-			e->loop_count--;
-		}
-		else{
-			e->direction = HBRIDGE_ACTION_RIGHT;
-			e->count ++;
-			e->loop_count++;
-		}
-	}
-}
-
+/*! Initializes the horizontal left end switch */
 void init_end_switch(){
 
-	//switch
-	//DDR_CONFIG_IN(HBRIDGE_SWITCH);
-
-	//PIN_SET(HBRIDGE_SWITCH); 
 	DDRA&=~(1<<HBRIDGE_SWITCH_PIN); //as input
 	PORTA|=(1<<HBRIDGE_SWITCH_PIN); //enable pull-up
 
-	//interrupt would be nice here but INT0 and INT1 are on Port D (EXT.) and on INT 2 is used for 		//	Networking
-	//on atmega32 interrupts only on pins INT0, INT1 and INT2 possible!?!
-	
-	//so the analog comparator ISR is used to check if the switch is activated
 }
 
+/*! \details This function initializes the data in a PID structure.
+ *
+ */
+void pid_init_f(pid_f_t * ptr /*! A pointer to the PID data structure */,
+    float min /*! The manipulated variable's minimum value */,
+    float max /*! The manipulated variable's maximum value */){
+	memset(ptr, 0, sizeof(pid_f_t));
+	ptr->min = min;
+	ptr->max = max;
 
-// Interrupt handler for ANA_COMP_vect
-//
-ISR(ANA_COMP_vect) {
+	ptr->e = 0.0;
+	ptr->i = 0.0;
 
-	//toggle led for each interrupt
-	PIN_TOGGLE(HBRIDGE_DEBUG_LED);
-
-	//count encoder pulses
-
-	int A = bit_is_clear(ACSR, ACO);
-	int B = PIN_HIGH(HBRIDGE_ENCODER_PHASE_B) == 2; //true is 2?
-
-	//HBRIDGEDEBUG ("A: %d B: %d Count: %d\n",A,B,encoder1_ptr->count);
-
-
-	// encoder pointer, phase A, phase B
-	encoder_update(encoder1_ptr, A, B);
-
-	//call check switch state here to avoid polling the switch
-	check_switch_state();	
-}
-
-void set_set_point(int set_point){
-
-	 pid_set_point = set_point;
-	 
-}
-
-void set_kp(float kp){
-	pid_constants_ptr->kp = kp;
-
-	HBRIDGEDEBUG ("setkp: %f\n", pid_constants_ptr->kp);
-}
-
-void set_ki(float ki){
-	pid_constants_ptr->ki = ki;
-
-	HBRIDGEDEBUG ("setki: %f\n", pid_constants_ptr->ki);
-}
-
-void set_acceleration(float acc){
-	acceleration = acc;
-
-	HBRIDGEDEBUG ("set acceleration: %f\n", pid_constants_ptr->kd);
-}
-
-void check_switch_state(){
+	ptr->kp = KP;
+	ptr->ki = KI;
+	ptr->kd = KD;
 
 	
-
-	//if the stop switch is activated stop motor
-	
-	 if (PIN_HIGH(HBRIDGE_SWITCH)==0 && left_end_switch_enabled == 1){
-
-			left_end_switch_enabled = 0;
-			
-		
-			HBRIDGEDEBUG ("counted steps: %d \n",encoder1_ptr->count);
-		
-			stop_all();
-			
-			ramped_set_point = pid_set_point = encoder1_ptr->count = 0;
-
-			hbridge_disable(HBRIDGE_1_SELECT);
-			hbridge_disable(HBRIDGE_2_SELECT); //TODO: adapt for second motor
-
-			set_set_point(100);
-
-
-	}
 }
 
+/****************************
+
+PERIODICALLY CALLED FUNCTIONS
+
+****************************/
+
+/*! Main loop called by timer every 20ms (see META at the bottom of the file) */
 void main_loop(){
 
 	//check if stop switch was pressed
@@ -395,8 +224,8 @@ void main_loop(){
 	//solved problem if carriage is moved manually the motor starts full speed in this direction
 	
 
-		//determine direction of movement
-	if(error > 0){   //TODO: Doku > oder >= aufeinmal vollgas in die andere richtung???
+	//determine direction of movement
+	if(error > 0){ 
 		pid_constants_ptr->direction = HBRIDGE_ACTION_RIGHT;
 
 	}else if(error < 0){
@@ -438,29 +267,58 @@ void main_loop(){
 
 	}
 
-	pwm = pid_update_f((float)ramped_set_point, (float)encoder1_ptr->count, pid_constants_ptr); 
+	enable2_pwm = pid_update_f((float)ramped_set_point, (float)encoder1_ptr->count, pid_constants_ptr); 
 
 
 	//invert pwm
-	pwm = HBRIDGE_PWM_STOP - pwm;
-
-
+	enable2_pwm = HBRIDGE_PWM_STOP - enable2_pwm;
 
 	hbridge(HBRIDGE_2_SELECT, pid_constants_ptr->direction);
 
 
-	hbridge_pwm(HBRIDGE_2_SELECT, pwm);
-
 
 }
 
-//stops all motor movements
-void stop_all(){
+
+/*! Determines direction and updates encoder count from the logic 
+		levels of the encoder's A and B outputs. 
+	/param e encoder data structure
+	/param A logic level phase A
+	/param B logic level phase B
+*/
+
+void encoder_update(encoder *e, int A, int B){
 	
-	ramped_set_point = pid_set_point = encoder1_ptr->count;
+	if(A == 1){
+		// Rising edge of A.
+		if(B == 1){
+			
+			e->count ++;
+			
+		}
+		else{
+			
+			e->count --;
 
+		}
+	}
+	else{
+		// Falling edge of A.
+		if(B == 1){
+	
+			e->count --;
+		
+		}
+		else{
+
+			e->count ++;
+		
+		}
+	}
 }
 
+/*! stops motor if the error is smaller than the POSITION_TOLERANCE to avoid motor noise 
+		called by timer every 50*20ms (see META at the bottom of the file) */
 void check_stop_threshold(){
 	
 	
@@ -487,68 +345,74 @@ void check_stop_threshold(){
 
 }
 
-void move_tray_to_init_position(){
 
-	//drive to left until the stop switch is hit
-	set_set_point(-5000);
+/*! ISR for ANA_COMP_vect created by encoder flanks */
+
+ISR(ANA_COMP_vect) {
+
+	//toggle led for each interrupt
+	PIN_TOGGLE(HBRIDGE_DEBUG_LED);
+
+	//count encoder pulses
+
+	int A = bit_is_clear(ACSR, ACO);
+	int B = PIN_HIGH(HBRIDGE_ENCODER_PHASE_B) == 2; //true is 2?
+
+	//HBRIDGEDEBUG ("A: %d B: %d Count: %d\n",A,B,encoder1_ptr->count);
+
+
+	// encoder pointer, phase A, phase B
+	encoder_update(encoder1_ptr, A, B);
+
+	//call check switch state here to avoid polling the switch
+	check_switch_state();	
+}
+
+
+/*! Called by main_loop() to check if the left end switch was pressed and to stop motor */
+void check_switch_state(){
+
+	//if the stop switch is activated stop motor
 	
+	 if (PIN_HIGH(HBRIDGE_SWITCH)==0 && left_end_switch_enabled == 1){
 
+			left_end_switch_enabled = 0;
+			
+		
+			HBRIDGEDEBUG ("counted steps: %d \n",encoder1_ptr->count);
+		
+			stop_all();
+			
+			//reset encoder count
+			ramped_set_point = pid_set_point = encoder1_ptr->count = 0;
+
+			set_set_point(100);
+
+
+	}
 }
 
-void move_tray_test(){
 
-
-
-}
-
-/*! \details This function initializes the data in a PID structure.
- *
- */
-void pid_init_f(pid_f_t * ptr /*! A pointer to the PID data structure */,
-    float min /*! The manipulated variable's minimum value */,
-    float max /*! The manipulated variable's maximum value */){
-	memset(ptr, 0, sizeof(pid_f_t));
-	ptr->min = min;
-	ptr->max = max;
-
-	ptr->e = 0.0;
-	ptr->i = 0.0;
-
-	ptr->kp = KP;
-	ptr->ki = KI;
-	ptr->kd = KD;
-
-	
-}
- 
 /*! \details This function updates the value of the manipulated variable (MV)
- * based on the current state of the PID loop. Sets the direction of movement in the pid_constants struct
+ * based on the current state of the PID loop.
  */
 float pid_update_f(float sp /*! The set point */,
     float pv /*! The process variable */,
     pid_f_t * ptr /*! A pointer to the PID constants */){
-  float temp;
+ 
   float e;
-  float p;
   float manp;
   float tmpi;
-
 
   e = ptr->e;
 
   ptr->e = abs(sp - pv);
 
-
-
-	
-
-
   tmpi = ptr->i + ptr->e;
   //bound the integral
   manp = ptr->kp * ptr->e + ptr->ki * tmpi + ptr->kd * (e - ptr->e);
 
-//lower acceleration
- // manp = ptr->last_speed + ptr->acceleration*manp;
+
 
   if ( (manp < ptr->max) && (manp > ptr->min) ){
     ptr->i = tmpi;
@@ -560,22 +424,150 @@ float pid_update_f(float sp /*! The set point */,
     manp = ptr->min;
   }
 
- 
-
   return manp;
 }
 
+/****************************
 
+INTERFACE FUNCTIONS
 
-/*
-//move steps_in_cm cm to right
-void move(uint8_t selection, uint8_t direction){
+****************************/
 
-	int real_steps_to_make = steps_in_cm * STEPS_PER_CM;
+/*! Sets the desired poisition of the tray.
+	\param set_point as integer encoder steps. (one step = 0,083 mm)
+*/
+void set_set_point(int set_point){
 
+	 pid_set_point = set_point;
+	 
+}
+
+/*! Sets PID's propotional value (default see KP)
+	\param kp as float.
+*/
+void set_kp(float kp){
+	pid_constants_ptr->kp = kp;
+
+	HBRIDGEDEBUG ("setkp: %f\n", pid_constants_ptr->kp);
+}
+
+/*! Sets PID's integral value (default see KI)
+	\param ki as float.
+*/
+void set_ki(float ki){
+	pid_constants_ptr->ki = ki;
+
+	HBRIDGEDEBUG ("setki: %f\n", pid_constants_ptr->ki);
+}
+
+/*! Sets acceleration for ramping (default see ACCELERATION)
+	\param acc an integer acceleration.
+*/
+void set_acceleration(int acc){
+	acceleration = acc;
+
+	HBRIDGEDEBUG ("set acceleration: %f\n", pid_constants_ptr->kd);
+}
+
+/*! Moves tray to the initial position */
+void move_tray_to_init_position(){
+
+	//drive to left until the stop switch is hit
+	set_set_point(-5000);
+	
 
 }
+
+/****************************
+
+HELPER FUNCTIONS
+
+****************************/
+
+/*! stops all motor movements */
+void stop_all(){
+	
+	ramped_set_point = pid_set_point = encoder1_ptr->count;
+
+}
+
+void
+hbridge_disable(uint8_t selection){
+
+  if (selection==HBRIDGE_1_SELECT){
+	
+	OCR1A=HBRIDGE_PWM_STOP;
+	
+  } else {
+  	
+	OCR2=HBRIDGE_PWM_STOP; 
+
+  }
+
+}
+
+/*!
+	Enables the selection H-Bridge by setting the speed of enable*_pwm
 */
+void
+hbridge_enable(uint8_t selection){
+
+  if (selection==HBRIDGE_1_SELECT){
+    OCR1A=enable1_pwm;
+  } else {
+    OCR2=enable2_pwm; 
+  }
+
+}
+
+void
+hbridge(uint8_t selection, uint8_t action)
+{
+  if (selection==HBRIDGE_1_SELECT){
+
+		  PIN_CLEAR(HBRIDGE_I1);
+
+		  switch (action){
+			case HBRIDGE_ACTION_BRAKE: 
+				hbridge_disable(selection);
+				break;
+			case HBRIDGE_ACTION_RIGHT: 
+
+			 	PIN_CLEAR(HBRIDGE_I1);
+
+				hbridge_enable(selection);
+				break;
+			case HBRIDGE_ACTION_LEFT: 
+
+			  	PIN_SET(HBRIDGE_I1);
+
+				hbridge_enable(selection);
+				break;
+		  }
+
+  }else{
+
+	 	 PIN_CLEAR(HBRIDGE_I2);
+
+		  switch (action){
+			case HBRIDGE_ACTION_BRAKE: 
+				hbridge_disable(selection);
+				break;
+			case HBRIDGE_ACTION_LEFT: 
+
+			  	PIN_CLEAR(HBRIDGE_I2);
+				hbridge_enable(selection);
+				break;
+			case HBRIDGE_ACTION_RIGHT: 
+
+			  	PIN_SET(HBRIDGE_I2);
+				hbridge_enable(selection);
+				break;
+		  }
+
+  } 
+
+}
 
 
 /*
@@ -586,8 +578,8 @@ void move(uint8_t selection, uint8_t direction){
   timer(50,check_stop_threshold())
   
 */
-//timer(1,main_loop())
-//timer(5,main_loop())
-//TODO: adapt timer value (value x 20ms ?)
-//put this into meta for periodic call of function timer(1, joystick_digital_periodic())
+
+/*According to ethersex documentation timer(1,function()) means call function() every 1*20ms
+	not sure if this is really the case TODO check */
+
 
