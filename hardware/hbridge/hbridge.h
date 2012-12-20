@@ -31,7 +31,7 @@ closer than ACCELERATION_LIMITED_SWITCH_OFF_THRESHOLD the ramping is disabled */
 
 /*!If the error is smaller than this value the motor stops to avoid noise.
 one step = 0,083 mm */
-#define POSITION_TOLERANCE 15
+#define POSITION_TOLERANCE 1
 
 /*!pwm values for pid control*/
 #define PID_PWM_MIN 0.0

@@ -54,7 +54,6 @@ pid_f_t *pid_constants_ptr = &pid_constants;
 
 //for acceleration control
 int ramped_set_point = 0;
-float pwm = 0;
 int acceleration_limiter_switch_off_threshold = ACCELERATION_LIMITED_SWITCH_OFF_THRESHOLD;
 int acceleration = ACCELERATION;
 int error = 0;
@@ -217,12 +216,20 @@ void main_loop(){
 	//check if stop switch was pressed
 	check_switch_state();
 
-	
+
 	//calculate real error to determine direction of movement
 	error = pid_set_point - encoder1_ptr->count;
 
-	//solved problem if carriage is moved manually the motor starts full speed in this direction
-	
+	//stop if in range of position_tolerance
+	if(abs(error) < position_tolerance){ 
+
+		stop_all();
+
+		//reset integral of PID
+		pid_constants_ptr->i = 0;
+
+
+	}
 
 	//determine direction of movement
 	if(error > 0){ 
@@ -322,23 +329,11 @@ void encoder_update(encoder *e, int A, int B){
 void check_stop_threshold(){
 	
 	
-	HBRIDGEDEBUG ("ramped sp: %d pwm: %f %d pos: %d error: %f \n", ramped_set_point, pwm, 
-			pid_constants_ptr->direction, encoder1_ptr->count, pid_constants_ptr->e);
+	HBRIDGEDEBUG ("ramped sp: %d pwm: %d pos: %d error: %f \n", ramped_set_point, enable2_pwm, 
+			 encoder1_ptr->count, pid_constants_ptr->e);
 
 
-		//stop if in range of position_tolerance
-	if(abs(pid_constants_ptr->e) < position_tolerance){ // && last_error < position_tolerance
-
-		stop_all();
-
-		HBRIDGEDEBUG ("Stopped because position_tolerance was reached \n");
-
-
-	}
-
-	//last_error = abs(pid_constants_ptr->e);
-
-	//reenable left end switch
+	//reenable left end switch which was disabled by activating the switch
 
 	left_end_switch_enabled = 1;
 
@@ -576,7 +571,7 @@ hbridge(uint8_t selection, uint8_t action)
   init(init_hbridge)
   timer(1,main_loop())
   timer(50,check_stop_threshold())
-  
+
 */
 
 /*According to ethersex documentation timer(1,function()) means call function() every 1*20ms
