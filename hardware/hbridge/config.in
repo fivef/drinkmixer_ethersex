@@ -1,7 +1,4 @@
 dep_bool_menu "H-Bridge (EXPERIMENTAL)" HBRIDGE_SUPPORT $CONFIG_EXPERIMENTAL
-    if [ "$HBRIDGE_SUPPORT" = "y" ]; then
-	   
-	fi
 	comment  "Debugging Flags"
 	dep_bool 'H-Bridge Debug' DEBUG_HBRIDGE $DEBUG $HBRIDGE_SUPPORT
 endmenu
