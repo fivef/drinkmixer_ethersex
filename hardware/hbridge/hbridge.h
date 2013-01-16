@@ -22,24 +22,25 @@
 #ifndef HAVE_HBRIDGE_H
 #define HAVE_HBRIDGE_H
 
-/*!if the ramped set point is very close to the real setpoint 
-closer than ACCELERATION_LIMITED_SWITCH_OFF_THRESHOLD the ramping is disabled */
-#define ACCELERATION_LIMITED_SWITCH_OFF_THRESHOLD 10
+/*!if the ramped set point is very close to the real setpoint.
+If closer than ACCELERATION_LIMITED_SWITCH_OFF_THRESHOLD the ramping is disabled 
+one step = 0,083 mm */
+#define ACCELERATION_LIMITED_SWITCH_OFF_THRESHOLD 1
 
 /*!Default acceleration for the ramping curve*/
 #define ACCELERATION 1
 
 /*!If the error is smaller than this value the motor stops to avoid noise.
 one step = 0,083 mm */
-#define POSITION_TOLERANCE 1
+#define POSITION_TOLERANCE 0
 
 /*!pwm values for pid control*/
 #define PID_PWM_MIN 0.0
 #define PID_PWM_MAX 150.0 //PID_PWM_MAX = 150 good for 60Hz PWM
 
 /*!pid initial values*/
-#define KP 1.3
-#define KI 0
+#define KP 0.6
+#define KI 0.0007
 #define KD 0
 
 
@@ -122,7 +123,7 @@ void
 hbridge_pwm(uint8_t selection, uint8_t speed);
 
 void 
-check_stop_threshold();
+check_periodic();
 
 void 
 stop_all();

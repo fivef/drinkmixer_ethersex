@@ -38,6 +38,9 @@ Check hardware's pinning *.m4 (e.g. netio.m4):
 //for comparator
 #include <avr/io.h> 
 
+//for experimental analog voltage of pressure sensor
+//#include "../adc/adc.h"
+
 
 //init data structures
 
@@ -59,7 +62,6 @@ int acceleration = ACCELERATION;
 int error = 0;
 
 //for check stop threshold to stop the motor if close to setpoint
-int last_error = 0;
 int position_tolerance = POSITION_TOLERANCE;
 
 
@@ -111,7 +113,7 @@ init_hbridge(){
 	*/
 	  TCCR1A|=_BV(COM1A1)|_BV(COM1A0);
 
-	// Set PWM, Phase Correct, 8 bit (see. Table 47)
+	// Set PWM, Phase Correct, 8 bit (see Table 47 Atmega 32 Manual
 	  TCCR1A|=_BV(WGM10); 
 	  //TCCR1B|=_BV(WGM12); 
 
@@ -120,17 +122,19 @@ init_hbridge(){
 
 
 	/////////////////////////////////////////////////
-	//same for second timer (caution: different Registers!)
+	//same for second timer (Timer/Counter2) (caution: different Registers!)
 	/////////////////////////////////////////////////
 
-	// Set Fast PWM?, 8 bit (see. Table 47)
-	  TCCR2|=_BV(WGM20)|_BV(WGM21);
-	  TCCR2|=_BV(COM21)|_BV(COM20);
+	
+	  TCCR2|=_BV(WGM20)|_BV(WGM21); // Set Fast PWM, 8 bit (see Table 52 Atmega 32 Manual)
+	  TCCR2|=_BV(COM21)|_BV(COM20); // set OC2 on compare match (inverting mode) (see Table 52 Atmega 32 Manual)
+
+	//TODO try non inverting mode: TCCR2|=_BV(COM21); // clear OC2 on compare match (non-inverting mode) (see Table 52 Atmega 32 Manual)
 
 	// clockselect: (clkI/O)/1 (No prescaling)
 
 		//TCCR2|=_BV(CS20); // no prescaling; //no noise but not working good
-	  TCCR2|=_BV(CS20)|_BV(CS21)|_BV(CS22);  //clk/1024 working good but loud  1  30Hz on PHase Correct PWM
+	  TCCR2|=_BV(CS20)|_BV(CS21)|_BV(CS22);  //clk/1024 working good but loud
 																//60Hz on Fast PWM
 
 	
@@ -210,7 +214,7 @@ PERIODICALLY CALLED FUNCTIONS
 
 ****************************/
 
-/*! Main loop called by timer every 20ms (see META at the bottom of the file) */
+/*! Main loop called every 20ms (see META at the bottom of the file) */
 void main_loop(){
 
 	//check if stop switch was pressed
@@ -221,7 +225,8 @@ void main_loop(){
 	error = pid_set_point - encoder1_ptr->count;
 
 	//stop if in range of position_tolerance
-	if(abs(error) < position_tolerance){ 
+/*
+	if(abs(error) <= position_tolerance){ 
 
 		stop_all();
 
@@ -230,27 +235,49 @@ void main_loop(){
 
 
 	}
+*/
 
 	//determine direction of movement
+	//if the direction changes or the error is 0 reset the PIDs integral variable
+	//to avoid noise and oscillation around the setpoint
 	if(error > 0){ 
+
+		//reset integral of PID if direction changed
+		if(pid_constants_ptr->direction == HBRIDGE_ACTION_LEFT){
+			pid_constants_ptr->i = 0;
+		}
+
 		pid_constants_ptr->direction = HBRIDGE_ACTION_RIGHT;
+
+		
 
 	}else if(error < 0){
 
+		//reset integral of PID if direction changed
+		if(pid_constants_ptr->direction == HBRIDGE_ACTION_RIGHT){
+			pid_constants_ptr->i = 0;
+		}
+
+
 		pid_constants_ptr->direction = HBRIDGE_ACTION_LEFT;
+
+		
 
 	}else if(error == 0){
 
 		//keep direction
 
+		//reset integral
+		pid_constants_ptr->i = 0;
+
 	}
 
 	//calculate ramped error to limit acceleration
-	error = pid_set_point - ramped_set_point;
+	int ramped_error = pid_set_point - ramped_set_point;
 
 
 	//limit acceleration
-	if(abs(error) > acceleration_limiter_switch_off_threshold){
+	if(abs(ramped_error) > acceleration_limiter_switch_off_threshold){
 
 		
 		if(pid_constants_ptr->direction == HBRIDGE_ACTION_RIGHT){
@@ -277,7 +304,7 @@ void main_loop(){
 	enable2_pwm = pid_update_f((float)ramped_set_point, (float)encoder1_ptr->count, pid_constants_ptr); 
 
 
-	//invert pwm
+	//invert pwm from 0 = stop, 255 = max speed to 0 = max speed, 255 = stop
 	enable2_pwm = HBRIDGE_PWM_STOP - enable2_pwm;
 
 	hbridge(HBRIDGE_2_SELECT, pid_constants_ptr->direction);
@@ -324,9 +351,9 @@ void encoder_update(encoder *e, int A, int B){
 	}
 }
 
-/*! stops motor if the error is smaller than the POSITION_TOLERANCE to avoid motor noise 
+/*! used for debug information and left_end_switch dead time
 		called by timer every 50*20ms (see META at the bottom of the file) */
-void check_stop_threshold(){
+void check_periodic(){
 	
 	
 	HBRIDGEDEBUG ("ramped sp: %d pwm: %d pos: %d error: %f \n", ramped_set_point, enable2_pwm, 
@@ -336,6 +363,14 @@ void check_stop_threshold(){
 	//reenable left end switch which was disabled by activating the switch
 
 	left_end_switch_enabled = 1;
+
+
+	//experimental preassure control loop
+	/*
+	int voltage = adc_get_voltage_setref(5,4); //Ref Voltage, Analog Input PD4
+
+	HBRIDGEDEBUG ("pressure: %f", voltage);
+	*/
 
 
 }
@@ -417,6 +452,7 @@ float pid_update_f(float sp /*! The set point */,
     manp = ptr->max;
   } else if ( manp < ptr->min ){
     manp = ptr->min;
+	 //manp = 0; //to avoid motor noise for PWM duty cycles below ptr->min
   }
 
   return manp;
@@ -570,11 +606,14 @@ hbridge(uint8_t selection, uint8_t action)
   header(hardware/hbridge/hbridge.h)
   init(init_hbridge)
   timer(1,main_loop())
-  timer(50,check_stop_threshold())
+  timer(50,check_periodic())
 
 */
 
 /*According to ethersex documentation timer(1,function()) means call function() every 1*20ms
-	not sure if this is really the case TODO check */
+	not sure if this is really the case TODO check 
+	
+
+*/
 
 
