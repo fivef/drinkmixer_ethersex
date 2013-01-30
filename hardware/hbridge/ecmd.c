@@ -71,69 +71,14 @@ int16_t parse_cmd_hbridge_acc_command(char *cmd, char *output, uint16_t len)
   return ECMD_FINAL_OK;
 }
 
-
-#ifdef HBRIDGE_SUPPORT
-int16_t parse_cmd_hbridge_command(char *cmd, char *output, uint16_t len) 
-{
-
-	uint8_t h_bridge_selection = 0;
-
-	if(cmd[0] == NULL || cmd[1] == NULL ){
-		return ECMD_ERR_PARSE_ERROR;
-	}
-
-	//bridge selection
-
-	switch (cmd[0]){
-
-		case '1':
-			h_bridge_selection = HBRIDGE_1_SELECT;
-
-		break;
-
-		case '2':
-			h_bridge_selection = HBRIDGE_2_SELECT;
-		break;
-
-
-		default:
-			return ECMD_ERR_PARSE_ERROR;
-
-	}
-
-	//direction
-
-	switch (cmd[1]){
-
-
-
-		case 'i':
-			
-			move_tray_to_init_position();
-		return ECMD_FINAL_OK;
-		
-
-
-		default:
-			return ECMD_ERR_PARSE_ERROR;
-
-	}
-
-	
-
-  return ECMD_FINAL_OK;
-}
 #endif /* HBRIDGE_SUPPORT */
-
-
 
 /*
   -- Ethersex META --
-  block([[H-Bridge]])
-  header(hardware/hbridge/hbridge.h)
-  ecmd_feature(hbridge_setpoint_command, "hbridge setpoint", int, Set H-Bridge enable line valueeg. speed)
-  ecmd_feature(hbridge_command, "hbridge direction ", [h_bridge] [action] , h_bridge_selection . direction . amount)
-	ecmd_feature(hbridge_kp_command, "hbridge kp", float, variable . amount)
-	ecmd_feature(hbridge_ki_command, "hbridge ki", float, variable . amount)
-	ecmd_feature(hbridge_acc_command, "hbridge acc", float, variable . amount)
+	block([[H-Bridge]])
+	header(hardware/hbridge/hbridge.h)
+	ecmd_feature(hbridge_setpoint_command, "hbridge setpoint", int, sets the setpoint)
+	ecmd_feature(hbridge_kp_command, "hbridge kp", float, PIDs P component)
+	ecmd_feature(hbridge_ki_command, "hbridge ki", float, PIDs I component)
+	ecmd_feature(hbridge_acc_command, "hbridge acc", float, Acceleration)
 */
