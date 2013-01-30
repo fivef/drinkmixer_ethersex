@@ -83,6 +83,8 @@ INITIALIZATION FUNCTIONS
 void
 init_hbridge(){
 
+	HBRIDGEDEBUG ("Initializing HBridge module");
+
 	//init pid
 	pid_init_f(pid_constants_ptr, PID_PWM_MIN, PID_PWM_MAX); 
   	init_linear_encoder();
@@ -147,20 +149,24 @@ init_hbridge(){
 
 
 	//move tray to 0 position
-	move_tray_to_init_position();
+	//move_tray_to_init_position();
 }
 
 /*! Initializes the analog comparator for linear encoder reading */
 
 void init_linear_encoder(){
 
-	//init phase A input
+	//init analog comparator for phase A input
 
 	DDRA&=~(1<<HBRIDGE_ENCODER_PHASE_A_PIN);//as input
 	PORTA&=~(1<<HBRIDGE_ENCODER_PHASE_A_PIN);//no Pull-up
 		
-	SFIOR|=(1<<ACME);//enable multiplexer
-	ADCSRA&=~(1<<ADEN);//make sure ADC is OFF 
+	//SFIOR|=(1<<ACME);//enable multiplexer
+	SFIOR&=~(1<<ACME);//disable multiplexer
+	
+	//ADCSRA&=~(1<<ADEN);//make sure ADC is OFF 
+	ADCSRA|=(1<<ADEN);//make sure ADC is ON	
+
 	ADMUX|=(0<<MUX2)|(1<<MUX1)|(0<<MUX0); //select ADC2 as negative AIN
 	ACSR|=
 	(0<<ACD)|	//Comparator ON
@@ -225,6 +231,7 @@ void main_loop(){
 	error = pid_set_point - encoder1_ptr->count;
 
 	//stop if in range of position_tolerance
+	//commented out because not needed if the I component of the PID controler is set != 0.
 /*
 	if(abs(error) <= position_tolerance){ 
 
@@ -242,16 +249,19 @@ void main_loop(){
 	//to avoid noise and oscillation around the setpoint
 	if(error > 0){ 
 
+
 		//reset integral of PID if direction changed
 		if(pid_constants_ptr->direction == HBRIDGE_ACTION_LEFT){
 			pid_constants_ptr->i = 0;
 		}
+
 
 		pid_constants_ptr->direction = HBRIDGE_ACTION_RIGHT;
 
 		
 
 	}else if(error < 0){
+
 
 		//reset integral of PID if direction changed
 		if(pid_constants_ptr->direction == HBRIDGE_ACTION_RIGHT){
@@ -287,9 +297,7 @@ void main_loop(){
 
 			ramped_set_point -= acceleration;
 		}
-
-		//increase acceleration for each iteration to go faster but with slow acceleration
-		
+	
 
 
 	}else{//if the ramped set point is very close to the real setpoint 
@@ -416,7 +424,8 @@ void check_switch_state(){
 			//reset encoder count
 			ramped_set_point = pid_set_point = encoder1_ptr->count = 0;
 
-			set_set_point(100);
+			//drive 100 steps right for init position
+			//set_set_point(100);
 
 
 	}
@@ -452,7 +461,6 @@ float pid_update_f(float sp /*! The set point */,
     manp = ptr->max;
   } else if ( manp < ptr->min ){
     manp = ptr->min;
-	 //manp = 0; //to avoid motor noise for PWM duty cycles below ptr->min
   }
 
   return manp;

@@ -39,7 +39,7 @@ one step = 0,083 mm */
 #define PID_PWM_MAX 150.0 //PID_PWM_MAX = 150 good for 60Hz PWM
 
 /*!pid initial values*/
-#define KP 0.6
+#define KP 0.5
 #define KI 0.0007
 #define KD 0
 
