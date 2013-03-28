@@ -71,7 +71,6 @@ int16_t parse_cmd_hbridge_acc_command(char *cmd, char *output, uint16_t len)
   return ECMD_FINAL_OK;
 }
 
-#endif /* HBRIDGE_SUPPORT */
 
 /*
   -- Ethersex META --
