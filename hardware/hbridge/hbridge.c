@@ -135,8 +135,8 @@ init_hbridge(){
 
 	// clockselect: (clkI/O)/1 (No prescaling)
 
-		//TCCR2|=_BV(CS20); // no prescaling; //no noise but not working good
-	  TCCR2|=_BV(CS20)|_BV(CS21)|_BV(CS22);  //clk/1024 working good but loud
+	  TCCR2|=_BV(CS20); // no prescaling; //no noise but not working good
+	  //TCCR2|=_BV(CS20)|_BV(CS21)|_BV(CS22);  //clk/1024 working good but loud
 																//60Hz on Fast PWM
 
 	
