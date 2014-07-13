@@ -65,9 +65,17 @@ int16_t parse_cmd_hbridge_acc_command(char *cmd, char *output, uint16_t len)
 {
   int acc = atoi(cmd);
 
-	set_acceleration(acc);
+  set_acceleration(acc);
 
   
+  return ECMD_FINAL_OK;
+}
+
+
+int16_t parse_cmd_hbridge_print_config_command(char *cmd, char *output, uint16_t len)
+{
+  print_current_config();
+
   return ECMD_FINAL_OK;
 }
 
@@ -79,5 +87,6 @@ int16_t parse_cmd_hbridge_acc_command(char *cmd, char *output, uint16_t len)
 	ecmd_feature(hbridge_setpoint_command, "hbridge setpoint", int, sets the setpoint)
 	ecmd_feature(hbridge_kp_command, "hbridge kp", float, PIDs P component)
 	ecmd_feature(hbridge_ki_command, "hbridge ki", float, PIDs I component)
-	ecmd_feature(hbridge_acc_command, "hbridge acc", float, Acceleration)
+	ecmd_feature(hbridge_acc_command, "hbridge acc", int, Acceleration)
+	ecmd_feature(hbridge_print_config_command, "hbridge print_config",, "Print current PID config, acceleration and position")
 */

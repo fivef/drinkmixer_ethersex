@@ -505,7 +505,7 @@ void set_ki(float ki){
 void set_acceleration(int acc){
 	acceleration = acc;
 
-	HBRIDGEDEBUG ("set acceleration: %f\n", pid_constants_ptr->kd);
+	HBRIDGEDEBUG ("set acceleration: %f\n", acceleration);
 }
 
 /*! Moves tray to the initial position */
@@ -514,6 +514,18 @@ void move_tray_to_init_position(){
 	//drive to left until the stop switch is hit
 	set_set_point(-5000);
 	
+
+}
+
+/*! Prints the current values of the pid values and the acceleration
+ */
+void print_current_config(){
+	HBRIDGEDEBUG ("Position: %i\n", encoder1_ptr->count);
+	HBRIDGEDEBUG ("setkp: %f\n", pid_constants_ptr->kp);
+	HBRIDGEDEBUG ("setki: %f\n", pid_constants_ptr->ki);
+	HBRIDGEDEBUG ("set acceleration: %i\n", acceleration);
+
+
 
 }
 
